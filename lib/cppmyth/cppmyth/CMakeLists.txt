@@ -2,6 +2,8 @@ cmake_minimum_required (VERSION 2.6 FATAL_ERROR)
 cmake_policy (VERSION 2.6)
 
 project (cppmyth)
+
+set (CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 #include (GNUInstallDirs)
 
 # Options
@@ -14,29 +16,42 @@ endif ()
 
 ###############################################################################
 # set lib version here
-set (CPPMYTH_LIB_VERSION "1.1.10")
-set (CPPMYTH_LIB_SOVERSION "1.1")
+set (CPPMYTH_LIB_VERSION "1.5.0")
+set (CPPMYTH_LIB_SOVERSION "1.5")
 
 ###############################################################################
 # add definitions
 if (MSVC)
-  # Turn off Microsofts "security" warnings.
-  add_definitions ("/W3 /D_USE_32BIT_TIME_T /D_CRT_SECURE_NO_WARNINGS /wd4005 /wd4996 /nologo")
+  add_definitions ("/D_USE_32BIT_TIME_T /D_CRT_SECURE_NO_WARNINGS")
   if (STATIC_CRT)
     set (CMAKE_C_FLAGS_RELEASE "/MT")
     set (CMAKE_C_FLAGS_DEBUG "/MTd")
+    set (CMAKE_CXX_FLAGS_RELEASE "/MT")
+    set (CMAKE_CXX_FLAGS_DEBUG "/MTd")
   endif ()
+  set (CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /W3")
+  set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /W3")
+  set (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /W3 /Od /RTC1 /EHsc /nologo")
+  set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /W3 /Od /RTC1 /EHsc /nologo")
 endif ()
 
 if (NOT WIN32 AND (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX))
-   add_definitions ("-fPIC")
+  add_definitions ("-fPIC")
+  include (CheckLibraryExists)
+  include (CheckAtomic)
+  if (HAS_BUILTIN_SYNC_ADD_AND_FETCH)
+    add_definitions ("-DHAS_BUILTIN_SYNC_ADD_AND_FETCH")
+  endif ()
+  if (HAS_BUILTIN_SYNC_SUB_AND_FETCH)
+    add_definitions ("-DHAS_BUILTIN_SYNC_SUB_AND_FETCH")
+  endif ()
 endif ()
 
 ###############################################################################
 # configure
-set (CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include (CheckFunctionExists)
 include (CheckFunctionKeywords)
+find_package (Threads REQUIRED)
 
 check_function_exists (timegm CHK_TIMEGM)
 if (CHK_TIMEGM)
@@ -130,62 +145,66 @@ file (GLOB SRC_FILES
   src/proto/*.cpp
   src/*.cpp)
 
-file (GLOB HDR_FILES
-  src/proto/*.h src/*.h)
+file (GLOB OS_SRC_FILES
+  src/private/os/threads/threadpool.cpp)
 
 if (MSVC)
-  file (GLOB PLATFORM_SRC_FILES
-    src/private/platform/windows/*.cpp)
+  list (APPEND OS_SRC_FILES
+    src/private/os/windows/winpthreads.c)
 endif ()
 
 set (CPPMYTH_SOURCES
-  ${SRC_FILES} ${HDR_FILES} ${PLATFORM_SRC_FILES})
+  ${SRC_FILES} ${OS_SRC_FILES})
 
 ###############################################################################
 # add targets
+set (cppmyth_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
+if (WIN32)
+  list (APPEND cppmyth_LIBRARIES ws2_32)
+else ()
+  list (APPEND cppmyth_LIBRARIES m)
+  find_library (LIBRT rt)
+  if (LIBRT)
+    list (APPEND cppmyth_LIBRARIES rt)
+  endif ()
+endif ()
+
 if (BUILD_SHARED_LIBS)
   add_library (cppmyth SHARED ${CPPMYTH_SOURCES})
-  if (MSVC)
-    set (DEPLIBS ws2_32)
-  else ()
-    set (DEPLIBS pthread m)
-    find_library (LIBRT rt)
-    if (LIBRT)
-      list (APPEND DEPLIBS rt)
-    endif ()
-  endif ()
-  target_link_libraries (cppmyth ${DEPLIBS})
-  set_target_properties (cppmyth PROPERTIES
+else ()
+  add_library (cppmyth STATIC ${CPPMYTH_SOURCES})
+endif ()
+target_link_libraries (cppmyth ${cppmyth_LIBRARIES})
+set_target_properties (cppmyth PROPERTIES
     VERSION "${CPPMYTH_LIB_VERSION}"
     SOVERSION "${CPPMYTH_LIB_SOVERSION}")
-else ()
-  add_library(cppmyth STATIC ${CPPMYTH_SOURCES})
-endif ()
 
 ###############################################################################
 # install targets
 # Create pkg-conf file.
 # (We use the same files as ./configure does, so we
 #  have to defined the same variables used there).
-if (NOT DEFINED CMAKE_INSTALL_BINDIR)
-  set(CMAKE_INSTALL_BINDIR bin)
-endif()
-if (NOT DEFINED CMAKE_INSTALL_LIBDIR)
-  set(CMAKE_INSTALL_LIBDIR lib)
-endif ()
-if (NOT DEFINED CMAKE_INSTALL_INCLUDEDIR)
-  set(CMAKE_INSTALL_INCLUDEDIR include)
-endif()
-set(prefix      ${CMAKE_INSTALL_PREFIX})
-set(exec_prefix ${CMAKE_INSTALL_PREFIX})
-set(libdir      ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR})
-set(VERSION     ${CPPMYTH_LIB_VERSION})
-configure_file (cppmyth.pc.in cppmyth.pc @ONLY)
+if (NOT WIN32)
+  if (NOT DEFINED CMAKE_INSTALL_BINDIR)
+    set (CMAKE_INSTALL_BINDIR bin)
+  endif ()
+  if (NOT DEFINED CMAKE_INSTALL_LIBDIR)
+    set (CMAKE_INSTALL_LIBDIR lib)
+  endif ()
+  if (NOT DEFINED CMAKE_INSTALL_INCLUDEDIR)
+    set (CMAKE_INSTALL_INCLUDEDIR include)
+  endif ()
+  set (prefix      ${CMAKE_INSTALL_PREFIX})
+  set (exec_prefix ${CMAKE_INSTALL_PREFIX})
+  set (libdir      ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR})
+  set (VERSION     ${CPPMYTH_LIB_VERSION})
+  configure_file (cppmyth.pc.in cppmyth.pc @ONLY)
 
-install (TARGETS cppmyth
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+  install (TARGETS cppmyth
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif ()
 
 install (FILES
   ${CMAKE_CURRENT_BINARY_DIR}/include/cppmyth_config.h

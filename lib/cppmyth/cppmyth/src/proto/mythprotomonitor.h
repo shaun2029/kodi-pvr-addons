@@ -25,6 +25,8 @@
 #include "mythprotobase.h"
 #include "mythprotorecorder.h"
 
+#include <vector>
+
 #define PROTO_MONITOR_RCVBUF      64000
 
 namespace Myth
@@ -84,15 +86,13 @@ namespace Myth
     {
       return QuerySGFile75(hostname, sgname, filename);
     }
-    MarkListPtr GetCutList(const Program& program, int unit = 0)
+    MarkListPtr GetCutList(const Program& program)
     {
-      //if (m_protoVersion >= ??) return GetCutList__(program, unit);
-      return GetCutList75(program, unit);
+      return GetCutList75(program);
     }
-    MarkListPtr GetCommBreakList(const Program& program, int unit = 0)
+    MarkListPtr GetCommBreakList(const Program& program)
     {
-      //if (m_protoVersion >= ??) return GetCommBreakList__(program, unit);
-      return GetCommBreakList75(program, unit);
+      return GetCommBreakList75(program);
     }
     bool BlockShutdown()
     {
@@ -103,6 +103,16 @@ namespace Myth
     {
       m_blockShutdown = false;
       return AllowShutdown75();
+    }
+    std::vector<int> GetFreeCardIdList()
+    {
+      return GetFreeCardIdList75();
+    }
+    CardInputListPtr GetFreeInputs(int rnum)
+    {
+      if (m_protoVersion >= 81) return GetFreeInputs81(rnum);
+      if (m_protoVersion >= 79) return GetFreeInputs79(rnum);
+      return GetFreeInputs75(rnum);
     }
 
   private:
@@ -120,12 +130,14 @@ namespace Myth
     bool StopRecording75(const Program& program);
     bool CancelNextRecording75(int rnum, bool cancel);
     StorageGroupFilePtr QuerySGFile75(const std::string& hostname, const std::string& sgname, const std::string& filename);
-    MarkListPtr GetCutList75(const Program& program, int unit);
-    MarkListPtr GetCutList__(const Program& program, int unit);
-    MarkListPtr GetCommBreakList75(const Program& program, int unit);
-    MarkListPtr GetCommBreakList__(const Program& program, int unit);
+    MarkListPtr GetCutList75(const Program& program);
+    MarkListPtr GetCommBreakList75(const Program& program);
     bool BlockShutdown75();
     bool AllowShutdown75();
+    std::vector<int> GetFreeCardIdList75();
+    CardInputListPtr GetFreeInputs75(int rnum);
+    CardInputListPtr GetFreeInputs79(int rnum);
+    CardInputListPtr GetFreeInputs81(int rnum);
 
     // Not implemented
     //int64_t GetBookmark75(Program& program);

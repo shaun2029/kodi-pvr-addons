@@ -32,7 +32,7 @@ using namespace Myth;
 uint32_t Myth::StringToId(const std::string& str)
 {
   uint32_t id = 0;
-  str2uint32(str.c_str(), &id);
+  string_to_uint32(str.c_str(), &id);
   return id;
 }
 
@@ -40,14 +40,14 @@ std::string Myth::IdToString(uint32_t id)
 {
   char buf[32];
   *buf = '\0';
-  uint32str(id, buf);
+  uint32_to_string(id, buf);
   return std::string(buf);
 }
 
 time_t Myth::StringToTime(const std::string& isotime)
 {
   time_t time = INVALID_TIME;
-  str2time(isotime.c_str(), &time);
+  string_to_time(isotime.c_str(), &time);
   return time;
 }
 
@@ -57,14 +57,14 @@ std::string Myth::TimeToString(time_t time, bool utc)
   {
     char buf[TIMESTAMP_UTC_LEN + 1];
     *buf = '\0';
-    time2iso8601utc(time, buf);
+    time_to_iso8601utc(time, buf);
     return std::string(buf);
   }
   else
   {
     char buf[TIMESTAMP_LEN + 1];
     *buf = '\0';
-    time2iso8601(time, buf);
+    time_to_iso8601(time, buf);
     return std::string(buf);
   }
 }
@@ -72,7 +72,7 @@ std::string Myth::TimeToString(time_t time, bool utc)
 int Myth::StringToInt(const std::string& str)
 {
   int32_t i = 0;
-  str2int32(str.c_str(), &i);
+  string_to_int32(str.c_str(), &i);
   return (int)i;
 }
 
@@ -80,7 +80,7 @@ std::string Myth::IntToString(int i)
 {
   char buf[32];
   *buf = '\0';
-  int32str(i, buf);
+  int32_to_string(i, buf);
   return std::string(buf);
 }
 
@@ -97,7 +97,7 @@ typedef struct
   const char  *sVal;
 } protoref_t;
 
-int __tValFromString(protoref_t *map, unsigned sz, unsigned proto, const std::string& sVal, int unk)
+static int __tValFromString(protoref_t *map, unsigned sz, unsigned proto, const std::string& sVal, int unk)
 {
   for (unsigned i = 0; i < sz; ++i)
   {
@@ -107,7 +107,7 @@ int __tValFromString(protoref_t *map, unsigned sz, unsigned proto, const std::st
   return unk;
 }
 
-int __tValFromNum(protoref_t *map, unsigned sz, unsigned proto, int iVal, int unk)
+static int __tValFromNum(protoref_t *map, unsigned sz, unsigned proto, int iVal, int unk)
 {
   for (unsigned i = 0; i < sz; ++i)
   {
@@ -117,7 +117,7 @@ int __tValFromNum(protoref_t *map, unsigned sz, unsigned proto, int iVal, int un
   return unk;
 }
 
-const char *__tValToString(protoref_t *map, unsigned sz, unsigned proto, int tVal, const char *unk)
+static const char *__tValToString(protoref_t *map, unsigned sz, unsigned proto, int tVal, const char *unk)
 {
   for (unsigned i = 0; i < sz; ++i)
   {
@@ -127,7 +127,7 @@ const char *__tValToString(protoref_t *map, unsigned sz, unsigned proto, int tVa
   return unk;
 }
 
-int __tValToNum(protoref_t *map, unsigned sz, unsigned proto, int tVal, int unk)
+static int __tValToNum(protoref_t *map, unsigned sz, unsigned proto, int tVal, int unk)
 {
   for (unsigned i = 0; i < sz; ++i)
   {

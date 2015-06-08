@@ -25,6 +25,7 @@ Makefile.include
 Makefile.include.in
 missing
 compile
+.dirstamp
 
 *.o
 *.a

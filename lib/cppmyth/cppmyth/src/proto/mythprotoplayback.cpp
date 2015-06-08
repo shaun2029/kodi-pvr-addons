@@ -21,19 +21,19 @@
 
 #include "mythprotoplayback.h"
 #include "../mythdebug.h"
-#include "../private/builtin.h"
 #include "../private/mythsocket.h"
-#include "../private/platform/threads/mutex.h"
+#include "../private/os/threads/mutex.h"
+#include "../private/builtin.h"
 
 #include <limits>
 #include <cstdio>
 
-#if defined _MSC_VER
+#ifdef __WINDOWS__
 #include <Ws2tcpip.h>
 #else
 #include <sys/socket.h> // for recv
 #include <sys/select.h> // for select
-#endif /* _MSC_VER */
+#endif /* __WINDOWS__ */
 
 using namespace Myth;
 
@@ -80,7 +80,7 @@ bool ProtoPlayback::IsOpen()
 
 bool ProtoPlayback::Announce75()
 {
-  PLATFORM::CLockObject lock(*m_mutex);
+  OS::CLockGuard lock(*m_mutex);
 
   std::string cmd("ANN Playback ");
   cmd.append(m_socket->GetMyHostName()).append(" 0");
@@ -101,11 +101,11 @@ void ProtoPlayback::TransferDone75(ProtoTransfer& transfer)
 {
   char buf[32];
 
-  PLATFORM::CLockObject lock(*m_mutex);
+  OS::CLockGuard lock(*m_mutex);
   if (!transfer.IsOpen())
     return;
   std::string cmd("QUERY_FILETRANSFER ");
-  uint32str(transfer.GetFileId(), buf);
+  uint32_to_string(transfer.GetFileId(), buf);
   cmd.append(buf).append(PROTO_STR_SEPARATOR).append("DONE");
   if (SendCommand(cmd.c_str()))
   {
@@ -121,18 +121,18 @@ bool ProtoPlayback::TransferIsOpen75(ProtoTransfer& transfer)
   std::string field;
   int8_t status = 0;
 
-  PLATFORM::CLockObject lock(*m_mutex);
+  OS::CLockGuard lock(*m_mutex);
   if (!IsOpen())
     return false;
   std::string cmd("QUERY_FILETRANSFER ");
-  uint32str(transfer.GetFileId(), buf);
+  uint32_to_string(transfer.GetFileId(), buf);
   cmd.append(buf);
   cmd.append(PROTO_STR_SEPARATOR);
   cmd.append("IS_OPEN");
 
   if (!SendCommand(cmd.c_str()))
     return false;
-  if (!ReadField(field) || 0 != str2int8(field.c_str(), &status))
+  if (!ReadField(field) || 0 != string_to_int8(field.c_str(), &status))
   {
       FlushMessage();
       return false;
@@ -151,6 +151,9 @@ int ProtoPlayback::TransferRequestBlock(ProtoTransfer& transfer, void *buffer, u
   fd_set fds;
   unsigned s = 0;
 
+  int64_t filePosition = transfer.GetPosition();
+  int64_t fileRequest = transfer.GetRequested();
+
   if (n == 0)
     return n;
 
@@ -163,7 +166,7 @@ int ProtoPlayback::TransferRequestBlock(ProtoTransfer& transfer, void *buffer, u
   // Max size is RCVBUF size
   if (n > PROTO_TRANSFER_RCVBUF)
     n = PROTO_TRANSFER_RCVBUF;
-  if ((transfer.filePosition + n) > transfer.fileRequest)
+  if ((filePosition + n) > fileRequest)
   {
     // Begin critical section
     m_mutex->Lock();
@@ -228,7 +231,8 @@ int ProtoPlayback::TransferRequestBlock(ProtoTransfer& transfer, void *buffer, u
         data = true;
         s += r;
         p += r;
-        transfer.filePosition += r;
+        filePosition += r;
+        transfer.SetPosition(filePosition);
       }
     }
     // Check for response of request
@@ -242,7 +246,8 @@ int ProtoPlayback::TransferRequestBlock(ProtoTransfer& transfer, void *buffer, u
       DBG(MYTH_DBG_DEBUG, "%s: receive block size (%u)\n", __FUNCTION__, (unsigned)rlen);
       if (rlen == 0 && !data)
         break; // no more data
-      transfer.fileRequest += rlen;
+      fileRequest += rlen;
+      transfer.SetRequested(fileRequest);
     }
   } while (request || data || !s);
   DBG(MYTH_DBG_DEBUG, "%s: data read (%u)\n", __FUNCTION__, s);
@@ -255,7 +260,7 @@ err:
     m_mutex->Unlock();
   }
   // Recover the file position or die
-  if (TransferSeek(transfer, transfer.filePosition, WHENCE_SET) < 0)
+  if (TransferSeek(transfer, filePosition, WHENCE_SET) < 0)
     HangException();
   return -1;
 }
@@ -268,12 +273,12 @@ bool ProtoPlayback::TransferRequestBlock75(ProtoTransfer& transfer, unsigned n)
   if (!transfer.IsOpen())
     return false;
   std::string cmd("QUERY_FILETRANSFER ");
-  uint32str(transfer.GetFileId(), buf);
+  uint32_to_string(transfer.GetFileId(), buf);
   cmd.append(buf);
   cmd.append(PROTO_STR_SEPARATOR);
   cmd.append("REQUEST_BLOCK");
   cmd.append(PROTO_STR_SEPARATOR);
-  uint32str(n, buf);
+  uint32_to_string(n, buf);
   cmd.append(buf);
 
   // No wait for feedback
@@ -286,7 +291,7 @@ int32_t ProtoPlayback::TransferRequestBlockFeedback75()
 {
   int32_t rlen = 0;
   std::string field;
-  if (!RcvMessageLength() || !ReadField(field) || 0 != str2int32(field.c_str(), &rlen) || rlen < 0)
+  if (!RcvMessageLength() || !ReadField(field) || 0 != string_to_int32(field.c_str(), &rlen) || rlen < 0)
   {
     DBG(MYTH_DBG_ERROR, "%s: invalid response for request block (%s)\n", __FUNCTION__, field.c_str());
     FlushMessage();
@@ -301,60 +306,62 @@ int64_t ProtoPlayback::TransferSeek75(ProtoTransfer& transfer, int64_t offset, W
   int64_t position = 0;
   std::string field;
 
+  int64_t filePosition = transfer.GetPosition();
+  int64_t fileSize = transfer.GetSize();
+
   // Check offset
   switch (whence)
   {
     case WHENCE_CUR:
       if (offset == 0)
-        return transfer.filePosition;
-      position = transfer.filePosition + offset;
-      if (position < 0 || position > transfer.fileSize)
+        return filePosition;
+      position = filePosition + offset;
+      if (position < 0 || position > fileSize)
         return -1;
       break;
     case WHENCE_SET:
-      if (offset == transfer.filePosition)
-        return transfer.filePosition;
-      if (offset < 0 || offset > transfer.fileSize)
+      if (offset == filePosition)
+        return filePosition;
+      if (offset < 0 || offset > fileSize)
         return -1;
       break;
     case WHENCE_END:
-      position = transfer.fileSize - offset;
-      if (position < 0 || position > transfer.fileSize)
+      position = fileSize - offset;
+      if (position < 0 || position > fileSize)
         return -1;
       break;
     default:
       return -1;
   }
 
-  PLATFORM::CLockObject lock(*m_mutex);
+  OS::CLockGuard lock(*m_mutex);
   if (!transfer.IsOpen())
     return -1;
   std::string cmd("QUERY_FILETRANSFER ");
-  uint32str(transfer.GetFileId(), buf);
+  uint32_to_string(transfer.GetFileId(), buf);
   cmd.append(buf);
   cmd.append(PROTO_STR_SEPARATOR);
   cmd.append("SEEK");
   cmd.append(PROTO_STR_SEPARATOR);
-  int64str(offset, buf);
+  int64_to_string(offset, buf);
   cmd.append(buf);
   cmd.append(PROTO_STR_SEPARATOR);
-  int8str(whence, buf);
+  int8_to_string(whence, buf);
   cmd.append(buf);
   cmd.append(PROTO_STR_SEPARATOR);
-  int64str(transfer.filePosition, buf);
+  int64_to_string(filePosition, buf);
   cmd.append(buf);
 
   if (!SendCommand(cmd.c_str()))
     return -1;
-  if (!ReadField(field) || 0 != str2int64(field.c_str(), &position))
+  if (!ReadField(field) || 0 != string_to_int64(field.c_str(), &position))
   {
       FlushMessage();
       return -1;
   }
   // Reset transfer
-  transfer.Lock();
   transfer.Flush();
-  transfer.filePosition = transfer.fileRequest = position;
-  transfer.Unlock();
+  transfer.SetRequested(position);
+  transfer.SetPosition(position);
   return position;
 }

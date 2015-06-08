@@ -1,4 +1,3 @@
-#pragma once
 /*
  *      Copyright (C) 2014 Jean-Luc Barriere
  *
@@ -20,7 +19,29 @@
  *
  */
 
-#include <cstddef>
+#ifndef MYTHDTO85_H
+#define	MYTHDTO85_H
 
-#define SAFE_DELETE(p)        if ((p) != NULL) { delete (p);    (p) = NULL; }
-#define SAFE_DELETE_ARRAY(p)  if ((p) != NULL) { delete[] (p);  (p) = NULL; }
+#include "mythdto.h"
+#include "version.h"
+#include "list.h"
+#include "program.h"
+#include "channel.h"
+#include "recording.h"
+#include "artwork.h"
+#include "capturecard.h"
+#include "videosource.h"
+#include "recordschedule.h"
+#include "cutting.h"
+
+namespace MythDTO85
+{
+  attr_bind_t cutting[] =
+  {
+    { "Mark",             IS_INT8,    (setter_t)MythDTO::SetCutting_MarkType },
+    { "Offset",           IS_INT64,   (setter_t)MythDTO::SetCutting_MarkValue },
+  };
+  bindings_t CuttingBindArray = { sizeof(cutting) / sizeof(attr_bind_t), cutting };
+}
+
+#endif	/* MYTHDTO85_H */

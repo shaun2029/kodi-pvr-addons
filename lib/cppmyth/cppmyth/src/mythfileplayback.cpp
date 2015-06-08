@@ -22,8 +22,8 @@
 #include "mythfileplayback.h"
 #include "mythlivetvplayback.h"
 #include "mythdebug.h"
+#include "private/os/threads/mutex.h"
 #include "private/builtin.h"
-#include "private/platform/threads/mutex.h"
 
 #include <limits>
 #include <cstdio>
@@ -50,7 +50,7 @@ FilePlayback::~FilePlayback()
 bool FilePlayback::Open()
 {
   // Begin critical section
-  PLATFORM::CLockObject lock(*m_mutex);
+  OS::CLockGuard lock(*m_mutex);
   if (ProtoPlayback::IsOpen())
     return true;
   return ProtoPlayback::Open();
@@ -59,7 +59,7 @@ bool FilePlayback::Open()
 void FilePlayback::Close()
 {
   // Begin critical section
-  PLATFORM::CLockObject lock(*m_mutex);
+  OS::CLockGuard lock(*m_mutex);
   CloseTransfer();
   ProtoPlayback::Close();
 }
@@ -67,7 +67,7 @@ void FilePlayback::Close()
 bool FilePlayback::OpenTransfer(const std::string& pathname, const std::string& sgname)
 {
   // Begin critical section
-  PLATFORM::CLockObject lock(*m_mutex);
+  OS::CLockGuard lock(*m_mutex);
   if (!ProtoPlayback::IsOpen())
     return false;
   CloseTransfer();
@@ -80,7 +80,7 @@ bool FilePlayback::OpenTransfer(const std::string& pathname, const std::string& 
 void FilePlayback::CloseTransfer()
 {
   // Begin critical section
-  PLATFORM::CLockObject lock(*m_mutex);
+  OS::CLockGuard lock(*m_mutex);
   if (m_transfer)
   {
     TransferDone(*m_transfer);
@@ -101,7 +101,7 @@ int64_t FilePlayback::GetSize() const
 {
   ProtoTransferPtr transfer(m_transfer);
   if (transfer)
-    return transfer->fileSize;
+    return transfer->GetSize();
   return 0;
 }
 
@@ -111,7 +111,7 @@ int FilePlayback::Read(void *buffer, unsigned n)
   if (transfer)
   {
     int r = 0;
-    int64_t s = transfer->fileSize - transfer->filePosition; // Acceptable block size
+    int64_t s = transfer->GetRemaining(); // Acceptable block size
     if (s > 0)
     {
       if (s < (int64_t)n)
@@ -136,6 +136,6 @@ int64_t FilePlayback::GetPosition() const
 {
   ProtoTransferPtr transfer(m_transfer);
   if (transfer)
-    return transfer->filePosition;
+    return transfer->GetPosition();
   return 0;
 }

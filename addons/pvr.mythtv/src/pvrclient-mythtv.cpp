@@ -257,7 +257,7 @@ void PVRClientMythTV::HandleBackendMessage(Myth::EventMessagePtr msg)
         // Refreshing all
         HandleChannelChange();
         HandleScheduleChange();
-        HandleRecordingListChange(msg);//(Myth::EventMessage());
+        HandleRecordingListChange(msg);
       }
       else if (msg->subject[0] == EVENTHANDLER_NOTCONNECTED)
       {

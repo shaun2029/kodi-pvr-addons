@@ -58,11 +58,11 @@ public:
   void OnActivatedGUI();
 
   // Implements EventSubscriber
-  void HandleBackendMessage(const Myth::EventMessage& msg);
+  void HandleBackendMessage(Myth::EventMessagePtr msg);
   void HandleChannelChange();
   void HandleScheduleChange();
-  void HandleAskRecording(const Myth::EventMessage& msg);
-  void HandleRecordingListChange(const Myth::EventMessage& msg);
+  void HandleAskRecording(Myth::EventMessagePtr msg);
+  void HandleRecordingListChange(Myth::EventMessagePtr msg);
   void RunHouseKeeping();
 
   // Implement FileConsumer

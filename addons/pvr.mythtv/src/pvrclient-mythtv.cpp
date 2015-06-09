@@ -217,9 +217,9 @@ void PVRClientMythTV::OnActivatedGUI()
   m_powerSaving = false;
 }
 
-void PVRClientMythTV::HandleBackendMessage(const Myth::EventMessage& msg)
+void PVRClientMythTV::HandleBackendMessage(Myth::EventMessagePtr msg)
 {
-  switch (msg.event)
+  switch (msg->event)
   {
     case Myth::EVENT_SCHEDULE_CHANGE:
       HandleScheduleChange();
@@ -234,7 +234,7 @@ void PVRClientMythTV::HandleBackendMessage(const Myth::EventMessage& msg)
       RunHouseKeeping();
       break;
     case Myth::EVENT_HANDLER_STATUS:
-      if (msg.subject[0] == EVENTHANDLER_DISCONNECTED)
+      if (msg->subject[0] == EVENTHANDLER_DISCONNECTED)
       {
         m_hang = true;
         if (m_control)
@@ -243,7 +243,7 @@ void PVRClientMythTV::HandleBackendMessage(const Myth::EventMessage& msg)
           m_scheduleManager->CloseControl();
         XBMC->QueueNotification(QUEUE_ERROR, XBMC->GetLocalizedString(30302)); // Connection to MythTV backend lost
       }
-      else if (msg.subject[0] == EVENTHANDLER_CONNECTED)
+      else if (msg->subject[0] == EVENTHANDLER_CONNECTED)
       {
         if (m_hang)
         {
@@ -257,9 +257,9 @@ void PVRClientMythTV::HandleBackendMessage(const Myth::EventMessage& msg)
         // Refreshing all
         HandleChannelChange();
         HandleScheduleChange();
-        HandleRecordingListChange(Myth::EventMessage());
+        HandleRecordingListChange(msg);//(Myth::EventMessage());
       }
-      else if (msg.subject[0] == EVENTHANDLER_NOTCONNECTED)
+      else if (msg->subject[0] == EVENTHANDLER_NOTCONNECTED)
       {
         // Try wake up if GUI is activated
         if (!m_powerSaving && !g_szMythHostEther.empty())
@@ -286,29 +286,29 @@ void PVRClientMythTV::HandleScheduleChange()
   PVR->TriggerTimerUpdate();
 }
 
-void PVRClientMythTV::HandleAskRecording(const Myth::EventMessage& msg)
+void PVRClientMythTV::HandleAskRecording(Myth::EventMessagePtr msg)
 {
   // ASK_RECORDING <card id> <time until> <has rec> <has later>[]:[]<program info>
   // Example: ASK_RECORDING 9 29 0 1[]:[]<program>
-  if (msg.subject.size() < 5)
+  if (msg->subject.size() < 5)
   {
-    for (unsigned i = 0; i < msg.subject.size(); ++i)
-      XBMC->Log(LOG_ERROR, "%s: Incorrect message: %d : %s", __FUNCTION__, i, msg.subject[i].c_str());
+    for (unsigned i = 0; i < msg->subject.size(); ++i)
+      XBMC->Log(LOG_ERROR, "%s: Incorrect message: %d : %s", __FUNCTION__, i, msg->subject[i].c_str());
     return;
   }
   // The scheduled recording will hang in MythTV if ASK_RECORDING is just ignored.
   // - Stop recorder (and blocked for time until seconds)
   // - Skip the recording by sending CANCEL_NEXT_RECORDING(true)
-  uint32_t cardid = Myth::StringToId(msg.subject[1]);
-  int timeuntil = Myth::StringToInt(msg.subject[2]);
-  int hasrec = Myth::StringToInt(msg.subject[3]);
-  int haslater = Myth::StringToInt(msg.subject[4]);
+  uint32_t cardid = Myth::StringToId(msg->subject[1]);
+  int timeuntil = Myth::StringToInt(msg->subject[2]);
+  int hasrec = Myth::StringToInt(msg->subject[3]);
+  int haslater = Myth::StringToInt(msg->subject[4]);
   XBMC->Log(LOG_NOTICE, "%s: Event ASK_RECORDING: rec=%d timeuntil=%d hasrec=%d haslater=%d", __FUNCTION__,
           cardid, timeuntil, hasrec, haslater);
 
   std::string title;
-  if (msg.program)
-    title = msg.program->title;
+  if (msg->program)
+    title = msg->program->title;
   XBMC->Log(LOG_NOTICE, "%s: Event ASK_RECORDING: title=%s", __FUNCTION__, title.c_str());
 
   if (timeuntil >= 0 && cardid > 0 && m_liveStream && m_liveStream->GetCardId() == cardid)
@@ -327,9 +327,9 @@ void PVRClientMythTV::HandleAskRecording(const Myth::EventMessage& msg)
   }
 }
 
-void PVRClientMythTV::HandleRecordingListChange(const Myth::EventMessage& msg)
+void PVRClientMythTV::HandleRecordingListChange(Myth::EventMessagePtr msg)
 {
-  unsigned cs = (unsigned)msg.subject.size();
+  unsigned cs = (unsigned)msg->subject.size();
   if (cs <= 1)
   {
     if (g_bExtraDebug)
@@ -338,10 +338,10 @@ void PVRClientMythTV::HandleRecordingListChange(const Myth::EventMessage& msg)
     FillRecordings();
     ++m_recordingChangePinCount;
   }
-  else if (cs == 4 && msg.subject[1] == "ADD")
+  else if (cs == 4 && msg->subject[1] == "ADD")
   {
-    uint32_t chanid = Myth::StringToId(msg.subject[2]);
-    time_t startts = Myth::StringToTime(msg.subject[3]);
+    uint32_t chanid = Myth::StringToId(msg->subject[2]);
+    time_t startts = Myth::StringToTime(msg->subject[3]);
     MythProgramInfo prog(m_control->GetRecorded(chanid, startts));
     if (!prog.IsNull())
     {
@@ -359,9 +359,9 @@ void PVRClientMythTV::HandleRecordingListChange(const Myth::EventMessage& msg)
     else
       XBMC->Log(LOG_ERROR, "%s: Add recording failed for %u %ld", __FUNCTION__, (unsigned)chanid, (long)startts);
   }
-  else if (cs == 3 && msg.subject[1] == "ADD")
+  else if (cs == 3 && msg->subject[1] == "ADD")
   {
-    uint32_t recordedid = Myth::StringToId(msg.subject[2]);
+    uint32_t recordedid = Myth::StringToId(msg->subject[2]);
     MythProgramInfo prog(m_control->GetRecorded(recordedid));
     if (!prog.IsNull())
     {
@@ -379,16 +379,16 @@ void PVRClientMythTV::HandleRecordingListChange(const Myth::EventMessage& msg)
     else
       XBMC->Log(LOG_ERROR, "%s: Add recording failed for %u", __FUNCTION__, (unsigned)recordedid);
   }
-  else if (cs == 2 && msg.subject[1] == "UPDATE" && msg.program)
+  else if (cs == 2 && msg->subject[1] == "UPDATE" && msg->program)
   {
     CLockObject lock(m_recordingsLock);
-    MythProgramInfo prog(msg.program);
+    MythProgramInfo prog(msg->program);
     ProgramInfoMap::iterator it = m_recordings.find(prog.UID());
     if (it != m_recordings.end())
     {
       if (g_bExtraDebug)
         XBMC->Log(LOG_DEBUG, "%s: Update recording: %s", __FUNCTION__, prog.UID().c_str());
-      if (m_control->RefreshRecordedArtwork(*(msg.program)) && g_bExtraDebug)
+      if (m_control->RefreshRecordedArtwork(*(msg->program)) && g_bExtraDebug)
         XBMC->Log(LOG_DEBUG, "%s: artwork found for %s", __FUNCTION__, prog.UID().c_str());
       // Reset to recalculate flags
       prog.Reset();
@@ -399,12 +399,12 @@ void PVRClientMythTV::HandleRecordingListChange(const Myth::EventMessage& msg)
       ++m_recordingChangePinCount;
     }
   }
-  else if (cs == 4 && msg.subject[1] == "DELETE")
+  else if (cs == 4 && msg->subject[1] == "DELETE")
   {
     // MythTV send two DELETE events. First requests deletion, second confirms deletion.
     // On first we delete recording. On second program will not be found.
-    uint32_t chanid = Myth::StringToId(msg.subject[2]);
-    time_t startts = Myth::StringToTime(msg.subject[3]);
+    uint32_t chanid = Myth::StringToId(msg->subject[2]);
+    time_t startts = Myth::StringToTime(msg->subject[3]);
     MythProgramInfo prog(m_control->GetRecorded(chanid, startts));
     if (!prog.IsNull())
     {
@@ -420,11 +420,11 @@ void PVRClientMythTV::HandleRecordingListChange(const Myth::EventMessage& msg)
       }
     }
   }
-  else if (cs == 3 && msg.subject[1] == "DELETE")
+  else if (cs == 3 && msg->subject[1] == "DELETE")
   {
     // MythTV send two DELETE events. First requests deletion, second confirms deletion.
     // On first we delete recording. On second program will not be found.
-    uint32_t recordedid = Myth::StringToId(msg.subject[2]);
+    uint32_t recordedid = Myth::StringToId(msg->subject[2]);
     MythProgramInfo prog(m_control->GetRecorded(recordedid));
     if (!prog.IsNull())
     {
@@ -1652,7 +1652,8 @@ bool PVRClientMythTV::OpenLiveStream(const PVR_CHANNEL &channel)
   // Set tuning delay
   m_liveStream->SetTuneDelay(g_iTuneDelay);
   // Try to open
-  if (m_liveStream->SpawnLiveTV(*(chan.GetPtr())))
+//  if (m_liveStream->SpawnLiveTV(*(chan.GetPtr())))
+  if (m_liveStream->SpawnLiveTV(chan.GetPtr()))
   {
     if(g_bDemuxing)
       m_demux = new Demux(m_liveStream);
